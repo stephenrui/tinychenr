@@ -1,22 +1,10 @@
-
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Aug 14 00:08:08 2019
-
-@author: Stephen
-"""
-
 import requests
 import re
-from bs4 import BeautifulSoup
+def retrieve_dji_list():
+    r = requests.get('http://money.cnn.com/data/dow30/')
+    search_pattern = re.compile('class="wsod_symbol">(.*?)<\/a>.*?<span.*?">(.*?)<\/span>.*?\n.*?class="wsod_stream">(.*?)<\/span>')
+    dji_list_in_text = re.findall(search_pattern, r.text)
+    return dji_list_in_text
 
-
-r = requests.get('http://money.cnn.com/data/dow30/')
-patern_1 = re.compile('class="wsod_symbol">(.*?)<\/a>')
-patern_2 = re.compile('<span title="(.*?)">')
-patern_3 = re.compile('<span stream="last_[0-9]*?" class="wsod_stream">(.*?)<\/span><\/td>')
-symbol = re.findall(patern_1,r.text)
-name = re.findall(patern_2,r.text)
-price = re.findall(patern_3,r.text)
-for result in zip(symbol,name,price):
-    print(result)
+dji_list = retrieve_dji_list()
+print(dji_list)
