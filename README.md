@@ -4,6 +4,14 @@ Created on Tue Aug 13 22:40:26 2019
 
 @author: Stephen
 """
+
+
+
+
+
+
+
+
 import requests
 import re
 import time
