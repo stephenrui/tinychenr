@@ -1,0 +1,118 @@
+import numpy as np
+import tensorflow as tf
+import math
+import skimage.io as io
+from  skimage import data_dir,color
+#import matplotlib.pyplot as plt
+import cv2
+from path import*
+
+sess = tf.InteractiveSession()
+
+img_size =100
+def rgb2gray(f):
+    rgb=io.imread(f)
+    return color.rgb2gray(rgb)
+
+def getName(f):
+    return f
+
+def oneHot(data,n):
+    data=tf.cast(data,tf.int32)
+    data=tf.subtract(data,1)
+    data=tf.one_hot(data,n)
+    data=data.eval().tolist()
+    data=np.reshape(data,[-1,n])
+    return data
+
+def loadDatadet(infile,k):
+    f=open(infile,'r')
+    sourceInLine=f.readlines()
+    dataset=[]
+    for line in sourceInLine:
+        temp1=line.strip('\n')
+        temp2=temp1.split()
+        dataset.append(temp2)
+    for i in range(0,len(dataset)):
+        for j in range(k):
+            dataset[i].append(float(dataset[i][j]))
+        del(dataset[i][0:k])
+    return dataset
+
+def getData(filename,n_input,n_spec):
+    data=loadDatadet(filename,n_input+1)
+    data=np.reshape(data,[-1,n_input+1])
+    trdata=data[:,:n_input]
+    trdata=np.reshape(trdata,[-1,n_input])
+    trlabel=data[:,n_input]
+    trlabel=tf.cast(trlabel,tf.int32)
+    trlabel=tf.subtract(trlabel,1)
+    trlabel=tf.one_hot(trlabel,n_spec)
+    trlabel=trlabel.eval().tolist()
+    trlabel=np.reshape(trlabel,[-1,n_spec])
+    return trdata,trlabel
+
+def getNspc(data,label,N,n_input):
+    newdata=[]
+    for i in range(np.shape(label)[0]):
+        if label[i,N-1]==1:
+            newdata.append(data[i,:])
+    newdata=np.reshape(newdata,[len(newdata),n_input])
+    return newdata
+
+def collect_img(filename, shape, species = 0):
+    out = io.ImageCollection(filename)
+    out=(np.reshape(out,shape))
+    return out
+
+def exsample(org):
+    org=np.reshape(org,[-1,img_size,img_size])
+    size=org[0].shape[0]
+    current=[]
+    out=[]
+    for i in range (len(org)):
+        current.append(cv2.resize(org[i],(size+10,size+10),interpolation=cv2.INTER_CUBIC))
+        for j in range(10):
+            out.append(current[i][j:j+size,j:j+size])
+    return np.reshape(out,[-1,size,size])
+
+def write_imgs(imgs,filename):
+    for i  in range(imgs.shape[0]):
+        str=filename+'%d.jpg'%i
+        cv2.imwrite(str,imgs[i])
+
+def concate_data(filesname, ifextern=True, long_folders=6):
+    org=[]
+    names=[]
+    for i in range(len(filesname)):
+        img=io.ImageCollection(filesname[i])
+        org.append(img)
+        name=io.ImageCollection(filesname[i],load_func=getName)
+        names.append(name)
+        if ifextern==True:
+            org[i]=exsample(org[i])
+    data = org[0]
+    label = [1]*len(data)
+    names1 = names[0]
+    for i in range(len(org)-1):
+        data = np.concatenate((data ,org[i+1]))
+        names1 = np.concatenate((names1,names[i+1]))
+        label = np.concatenate((label ,[i+2]*len(org[i+1])))
+    label = oneHot(label,len(org))
+    sample=[]
+    for i in range(len(data)):
+        #data[i]=cv2.resize(data[i],(img_size,img_size),interpolation = cv2.INTER_CUBIC)
+        sample.append([cv2.resize(data[i]/255.,(img_size,img_size),interpolation = cv2.INTER_CUBIC),
+                       label[i],
+                       names1[i].split('\\')[len(names1[i].split('\\'))-1],[]])
+    return sample,org
+
+def EHWT(data):
+    size = int(np.sqrt(np.size(data)))
+    out=[]
+    for i in range (0,size,2):
+        for j in range (0,size,2):
+            temp =np.sqrt(float(pow(data[i,j],2)+pow(data[i,j+1],2)))
+            temp = np.array(temp,np.uint8)
+            out.append(temp)
+    return np.reshape(np.array(out),[size//2,size//2])
