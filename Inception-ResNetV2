@@ -1,0 +1,317 @@
+from read_data import *
+from keras.layers import*
+from keras.models import *
+from keras import Sequential
+from keras.optimizers import *
+from keras.callbacks import *
+import pandas as pd
+from read_txt import loadtimes
+import matplotlib.pyplot as plt
+
+visit_size=25
+n_chanels = 1
+c=time.clock()
+
+str1='Space+HSI\\train\data1\*.jpg'
+str2='Space+HSI\\train\data2\*.jpg'
+str3='Space+HSI\\train\data3\*.jpg'
+str4='Space+HSI\\train\data4\*.jpg'
+str5='Space+HSI\\train\data5\*.jpg'
+
+str11='Space+HSI\\test\data1\*.jpg'
+str22='Space+HSI\\test\data2\*.jpg'
+str33='Space+HSI\\test\data3\*.jpg'
+str44='Space+HSI\\test\data4\*.jpg'
+str55='Space+HSI\\test\data5\*.jpg'
+
+trfiles=[str1,str2,str3,str4,str5]
+tefiles=[str11,str22,str33,str44,str55]
+n_speces = len(trfiles)
+trsample,_ = concate_data(trfiles,False)
+tesample,org = concate_data(tefiles,False)
+t0 = time.clock()
+
+df1=pd.DataFrame(trsample)
+df2=pd.DataFrame(tesample)
+
+print('load image time: ',time.clock()-c)
+
+
+Train_data = df1.sample(n=len(trsample))
+Train_xImage = Train_data[0].tolist()
+Train_xImage = np.reshape(Train_xImage,(-1,img_size,img_size,n_chanels))
+Train_xVisit = np.array(Train_data[3].tolist())
+print(Train_xVisit)
+Train_xVisit = np.reshape(Train_xVisit,(-1,visit_size))
+Train_y = Train_data[1].tolist()
+Train_y = np.reshape(Train_y,(-1,n_speces))
+
+Test_data = df2.sample(n=len(tesample))
+Test_xImage = Test_data[0].tolist()
+Test_xImage = np.reshape(Test_xImage,(-1,img_size,img_size,n_chanels))
+Test_Name = Test_data[2]
+Test_xVisit = np.array(Test_data[3].tolist())
+Test_xVisit = np.reshape(Test_xVisit,(-1,visit_size))
+Test_y = Test_data[1].tolist()
+Test_y = np.reshape(Test_y,(-1,n_speces))
+
+Image_Input = Input(shape=(img_size,img_size,n_chanels),name='Image_Input')
+
+def stem(map):
+    conv1 = Conv2D(32, (3,3), strides=(2,2))(map)#50
+    conv1 = BatchNormalization(axis=3)(conv1)
+    conv1 = ReLU()(conv1)
+    conv1 = Conv2D(32, (3,3))(conv1)#48
+    conv1 = BatchNormalization(axis=3)(conv1)
+    conv1 = ReLU()(conv1)
+    conv1 = Conv2D(64, (3,3))(conv1)#46
+    conv1 = BatchNormalization(axis=3)(conv1)
+    conv1 = ReLU()(conv1)
+    tower11 = Conv2D(96,(3,3),strides=(2,2))(conv1)#22
+    tower11 = BatchNormalization(axis=3)(tower11)
+    tower11 = ReLU()(tower11)
+    tower12 = MaxPooling2D(strides=(2,2))(conv1)
+    conv1 = concatenate([tower11,tower12],axis=3)
+    tower21 = Conv2D(64,(1,1),padding='same')(conv1)
+    tower21 = BatchNormalization(axis=3)(tower21)
+    tower21 = ReLU()(tower21)
+    tower21 = Conv2D(96,(3,3))(tower21)#20
+    tower21 = BatchNormalization(axis=3)(tower21)
+    tower21 = ReLU()(tower21)
+    tower22 = Conv2D(64,(1,1),padding='same')(conv1)
+    tower22 = BatchNormalization(axis=3)(tower22)
+    tower22 = ReLU()(tower22)
+    tower22 = Conv2D(64,(1,7),padding='same')(tower22)
+    tower22 = BatchNormalization(axis=3)(tower22)
+    tower22 = ReLU()(tower22)
+    tower22 = Conv2D(64,(7,1),padding='same')(tower22)
+    tower22 = BatchNormalization(axis=3)(tower22)
+    tower22 = ReLU()(tower22)
+    tower22 = Conv2D(96,(3,3))(tower22)
+    tower22 = BatchNormalization(axis=3)(tower22)
+    tower22 = ReLU()(tower22)
+    conv2 = concatenate([tower21,tower22],axis=3)
+    print(conv2.shape)
+    return conv2#20,20,192
+
+def InceptionRes_A(map):
+    tower1 = Conv2D(32,(1,1),padding='same')(map)
+    tower1 = BatchNormalization(axis=3)(tower1)
+    tower1 = ReLU()(tower1)
+    tower2 = Conv2D(32,(1,1),padding='same')(map)
+    tower2 = BatchNormalization(axis=3)(tower2)
+    tower2 = ReLU()(tower2)
+    tower2 = Conv2D(32,(3,3),padding='same')(tower2)
+    tower2 = BatchNormalization(axis=3)(tower2)
+    tower2 = ReLU()(tower2)
+    tower3 = Conv2D(32,(1,1),padding='same')(map)
+    tower3 = BatchNormalization(axis=3)(tower3)
+    tower3 = ReLU()(tower3)
+    tower3 = Conv2D(48,(3,3),padding='same')(tower3)
+    tower3 = BatchNormalization(axis=3)(tower3)
+    tower3 = ReLU()(tower3)
+    tower3 = Conv2D(64,(3,3),padding='same')(tower3)
+    tower3 = BatchNormalization(axis=3)(tower3)
+    tower3 = ReLU()(tower3)
+    tower = concatenate([tower1,tower2,tower3],axis=3)
+    tower = Conv2D(int(map.shape[3]),(1,1),padding='same',kernel_regularizer= regularizers.l1(0.0001))(tower)
+    tower = add([tower,map])
+    print(tower.shape)
+    return tower#20,20,192
+
+def Reduction_A(map):
+    maxpool = MaxPooling2D(pool_size=(3,3),strides=(2,2))(map)
+    conv1 = Conv2D(192,(3,3),strides=(2,2))(map)
+    conv1 = BatchNormalization(axis=3)(conv1)
+    conv1 = ReLU()(conv1)
+    conv2 = Conv2D(192,(1,1),padding='same')(map)
+    conv2 = BatchNormalization(axis=3)(conv2)
+    conv2 = ReLU()(conv2)
+    conv2 = Conv2D(224,(3,3),padding='same')(conv2)
+    conv2 = BatchNormalization(axis=3)(conv2)
+    conv2 = ReLU()(conv2)
+    conv2 = Conv2D(256,(3,3),strides=(2,2))(conv2)
+    conv2 = BatchNormalization(axis=3)(conv2)
+    conv2 = ReLU()(conv2)
+    tower = concatenate([maxpool,conv1,conv2],axis=3)
+    print(tower.shape)
+    return tower#9,9,640
+
+
+def InceptionRes_B(map):
+    tower1 = Conv2D(192,(1,1),padding='same')(map)
+    tower1 = BatchNormalization(axis=3)(tower1)
+    tower1 = ReLU()(tower1)
+    tower2 = Conv2D(128,(1,1),padding='same')(map)
+    tower2 = BatchNormalization(axis=3)(tower2)
+    tower2 = ReLU()(tower2)
+    tower2 = Conv2D(160,(1,5),padding='same')(tower2)
+    tower2 = BatchNormalization(axis=3)(tower2)
+    tower2 = ReLU()(tower2)
+    tower2 = Conv2D(192,(5,1),padding='same')(tower2)
+    tower2 = BatchNormalization(axis=3)(tower2)
+    tower2 = ReLU()(tower2)
+    tower = concatenate([tower1,tower2],axis=3)
+    tower = Conv2D(int(map.shape[3]),(1,1),padding='same',kernel_regularizer= regularizers.l1(0.0001))(tower)
+    tower = add([tower,map])
+    print(tower.shape)
+    return tower#9,9,640
+
+def Reduction_B(map):
+    maxpool = MaxPooling2D(pool_size=(3,3),strides=(2,2))(map)
+    conv1 = Conv2D(192,(1,1),padding='same')(map)
+    conv1 = BatchNormalization(axis=3)(conv1)
+    conv1 = ReLU()(conv1)
+    conv1 = Conv2D(192,(3,3),strides=(2,2))(conv1)
+    conv1 = BatchNormalization(axis=3)(conv1)
+    conv1 = ReLU()(conv1)
+    conv2 = Conv2D(256,(1,1),padding='same')(map)
+    conv2 = BatchNormalization(axis=3)(conv2)
+    conv2 = ReLU()(conv2)
+    conv2 = Conv2D(256,(1,5),padding='same')(conv2)
+    conv2 = BatchNormalization(axis=3)(conv2)
+    conv2 = ReLU()(conv2)
+    conv2 = Conv2D(320,(5,1),padding='same')(conv2)
+    conv2 = BatchNormalization(axis=3)(conv2)
+    conv2 = ReLU()(conv2)
+    conv2 = Conv2D(320,(3,3),strides=(2,2))(conv2)
+    conv2 = BatchNormalization(axis=3)(conv2)
+    conv2 = ReLU()(conv2)
+    tower = concatenate([maxpool,conv1,conv2],axis=3)
+    print(tower.shape)
+    return tower #4,4,1152
+
+def InceptionRes_C(map):
+    tower1 = Conv2D(192,(1,1),padding='same')(map)
+    tower1 = BatchNormalization(axis=3)(tower1)
+    tower1  = ReLU()(tower1 )
+    tower2 = Conv2D(192,(1,1),padding='same')(map)
+    tower2 = BatchNormalization(axis=3)(tower2)
+    tower2  = ReLU()(tower2 )
+    tower2 = Conv2D(224,(1,3),padding='same')(tower2)
+    tower2 = BatchNormalization(axis=3)(tower2)
+    tower2  = ReLU()(tower2 )
+    tower2 = Conv2D(256,(3,1),padding='same')(tower2)
+    tower2 = BatchNormalization(axis=3)(tower2)
+    tower2  = ReLU()(tower2 )
+    tower = concatenate([tower1,tower2],axis=3)
+    tower = Conv2D(int(map.shape[3]),(1,1),padding='same',kernel_regularizer= regularizers.l1(0.0001))(tower)
+    tower = add([tower,map])
+    print(tower.shape)
+    return tower#4,4,1152
+
+#Inception_resnetv2
+
+conv1 = stem(Image_Input)
+conv1 = InceptionRes_A(conv1)
+conv1 = SpatialDropout2D(0.25)(conv1)
+conv1 = Reduction_A(conv1)
+conv1 = InceptionRes_B(conv1)
+conv1 = InceptionRes_B(conv1)
+conv1 = InceptionRes_B(conv1)
+conv1 = Reduction_B(conv1)
+conv1 = InceptionRes_C(conv1)
+conv1 = InceptionRes_C(conv1)
+
+fc1 = GlobalAveragePooling2D()(conv1)
+fc1 = Dense(1000, activation='relu', kernel_regularizer= regularizers.l1(0.00005))(fc1)
+fc1 = Dropout(0.25)(fc1)
+fc1 = Dense(n_speces,activation='softmax')(fc1)
+
+reduce_lr = ReduceLROnPlateau(monitor='val_loss',patience=3,
+                              factor=0.95,mode='min',min_lr=1e-4)
+checkpoint = ModelCheckpoint('model\\InceptionNet_ResNet_V2.h5',
+                             monitor='val_loss',mode='min',save_best_only=True)
+
+model = Model(input = Image_Input, output = fc1)
+model.summary()
+model.compile(optimizer=Adam(),loss='categorical_crossentropy',metrics=['accuracy'])
+
+'''
+print('Training--------------\n')
+history = model.fit(x=Train_xImage,y=Train_y,
+          epochs=20,batch_size=32,
+          validation_data=[Test_xImage,Test_y],
+          callbacks=[reduce_lr,checkpoint])
+model.save('model\\InceptionNet_ResNet_V2_final.h5')
+
+plt.plot(history.history['acc'])
+plt.plot(history.history['val_acc'])
+plt.title('Model accuracy')
+plt.ylabel('Accuracy')
+plt.xlabel('Epoch')
+plt.legend(['Train', 'Test'], loc='upper left')
+plt.savefig('acc.jpg', dpi=300)
+plt.show()
+
+# 绘制训练 & 验证的损失值
+plt.plot(history.history['loss'])
+plt.plot(history.history['val_loss'])
+plt.title('Model loss')
+plt.ylabel('Loss')
+plt.xlabel('Epoch')
+plt.legend(['Train', 'Test'], loc='upper left')
+plt.savefig('loss.jpg', dpi=300)
+plt.show()
+'''
+modelname = 'model\\InceptionNet_ResNet_V2.h5'
+#modelname = 'model\\InceptionNet_ResNet_V2.h5'
+layername1 = 'concatenate_1'
+layername2 = 'concatenate_2'
+layername3 = 'concatenate_3'
+layername4 = 'concatenate_4'
+layername5 = 'concatenate_5'
+layername6 = 'concatenate_6'
+layername7 = 'concatenate_7'
+layername8 = 'concatenate_8'
+layername9 = 'concatenate_9'
+layername10 = 'concatenate_10'
+
+model = load_model(modelname)
+a=time.clock()
+score = model.evaluate(x = Test_xImage, y = Test_y, batch_size = 32)
+print('Accuracy: ------------',score)
+print('time:',time.clock()-a)
+def feature_map(modelname,layername,x):
+    model = load_model(modelname)
+    model.summary()
+    map_model = Model(model.input,model.get_layer(layername).output)
+    map = map_model.predict(x)
+    map = map*255
+    print('maps shape: ',map.shape)
+    bands = int(map.shape[3]/4)
+    show0 = np.array([map[:,:,:,1*bands]],dtype=np.uint8)
+    show0 = np.reshape(show0,[16,map.shape[1],map.shape[2],-1])
+    show1 = np.array([map[:,:,:,2*bands]],dtype=np.uint8)
+    show1 = np.reshape(show1,[16,map.shape[1],map.shape[2],-1])
+    show2 = np.array([map[:,:,:,3*bands]],dtype=np.uint8)
+    show2 = np.reshape(show2,[16,map.shape[1],map.shape[2],-1])
+    show=np.concatenate([show0,show1,show2],axis=3)
+    print(show.shape)
+    cv2.namedWindow('ori',cv2.WINDOW_NORMAL)
+    cv2.namedWindow(layername,cv2.WINDOW_NORMAL)
+    show4=[]
+    x4 = []
+    for i in range(4):
+        show4.append( np.concatenate([show[4*i],show[4*i+1],show[4*i+2],show[4*i+3]],axis=0))
+        x4.append(np.concatenate([x[4*i],x[4*i+1],x[4*i+2],x[4*i+3]],axis=0))
+    show16 = np.concatenate([show4[0],show4[1],show4[2],show4[3]],axis=1)
+    x16 = np.concatenate([x4[0],x4[1],x4[2],x4[3]],axis=1)
+    print(show16.shape,'  ',x16.shape)
+    cv2.imshow('ori',x16)
+    cv2.imshow(layername,show16)
+    cv2.imwrite('ori.jpg',x16)
+    cv2.imwrite(layername+'.jpg',show16)
+    cv2.waitKey(10)
+feature_map(modelname,layername1,Train_xImage[0:16])
+feature_map(modelname,layername2,Train_xImage[0:16])
+feature_map(modelname,layername3,Train_xImage[0:16])
+feature_map(modelname,layername4,Train_xImage[0:16])
+feature_map(modelname,layername5,Train_xImage[0:16])
+feature_map(modelname,layername6,Train_xImage[0:16])
+feature_map(modelname,layername7,Train_xImage[0:16])
+feature_map(modelname,layername8,Train_xImage[0:16])
+feature_map(modelname,layername9,Train_xImage[0:16])
+feature_map(modelname,layername10,Train_xImage[0:16])
+cv2.waitKey(0)
+
