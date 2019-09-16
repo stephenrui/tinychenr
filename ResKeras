@@ -1,0 +1,103 @@
+import numpy as np
+np.random.seed(1337)
+from keras.datasets import mnist
+from keras.utils import np_utils
+from keras.utils import plot_model
+from keras.models import*#abc
+from keras.layers import*
+from keras.optimizers import*
+from read_data import *
+from keras.callbacks import *
+import pandas as pd
+
+n_chanels = 3
+str1='F:\\TensorFlowTesting\\test\\daisy\\*.jpg'
+str2='F:\\TensorFlowTesting\\test\dandelion\\*.jpg'
+str3='F:\\TensorFlowTesting\\test\\roses\\*.jpg'
+str4='F:\\TensorFlowTesting\\test\\sunflowers\\*.jpg'
+str5='F:\\TensorFlowTesting\\test\\tulips\\*.jpg'
+trfiles=[str1,str2,str3,str4,str5]
+trsample,_ = concate_data(trfiles,False)
+df1=pd.DataFrame(trsample)
+
+str11='F:\\TensorFlowTesting\\test\\daisy\\*.jpg'
+str22='F:\\TensorFlowTesting\\test\dandelion\\*.jpg'
+str33='F:\\TensorFlowTesting\\test\\roses\\*.jpg'
+str44='F:\\TensorFlowTesting\\test\\sunflowers\\*.jpg'
+str55='F:\\TensorFlowTesting\\test\\tulips\\*.jpg'
+
+strtt='F:\\TensorFlowTesting\\test\\test\\*.jpg'
+tefiles=[str11,str22,str33,str44,str55]
+#tefiles=[strtt]
+tesample,org = concate_data(tefiles,False)
+df2=pd.DataFrame(tesample)
+
+n_species = len(trfiles)
+Train_data = df1.sample(n=len(trsample))
+Train_x = Train_data[0].tolist()
+Train_x = np.reshape(Train_x,(-1,img_size,img_size,n_chanels))
+Train_y = Train_data[1].tolist()
+Train_y = np.reshape(Train_y,(-1,n_species))
+Test_data = df2.sample(n=len(tesample))
+Test_x = Test_data[0].tolist()
+Test_x = np.reshape(Test_x,(-1,img_size,img_size,n_chanels))
+Test_y = Test_data[1].tolist()
+Test_y = np.reshape(Test_y,(-1,n_species))
+
+def ResBlock3(map,chanels,conv1_stride=1):
+    sizes = map.shape[2]
+    map= BatchNormalization(axis=3)(map)
+    conv1 = Conv2D(chanels,(1,1),strides=(conv1_stride,conv1_stride),padding='same',activation='relu')(map)
+    conv1= BatchNormalization(axis=3)(conv1)
+    conv2 = Conv2D(chanels,(3,3),padding='same',activation='relu')(conv1)
+    conv2= BatchNormalization(axis=3)(conv2)
+    conv2 = Conv2D(chanels*4,(1,1),padding='same',activation='relu')(conv2)
+    conv_pad = Conv2D(chanels*4,(1,1),padding='same')(conv1)
+    conv2 = add([conv2,conv_pad])
+    print(conv2.shape)
+    return conv2
+
+Image_Input = Input(shape=(img_size,img_size,n_chanels),name='Image_Input')
+
+conv1 = Conv2D(64,(5,5),padding='same',activation='relu')(Image_Input)
+conv1 = MaxPooling2D(pool_size=(3,3),strides=(2,2))(conv1)
+conv1 = SpatialDropout2D(0.25)(conv1)
+conv1 = ResBlock3(conv1,chanels=64,conv1_stride=2)
+conv1 = ResBlock3(conv1,chanels=64,conv1_stride=1)
+conv1 = ResBlock3(conv1,chanels=64,conv1_stride=1)
+conv2 = ResBlock3(conv1,chanels=128,conv1_stride=2)
+conv2 = ResBlock3(conv2,chanels=128,conv1_stride=1)
+conv2 = ResBlock3(conv2,chanels=128,conv1_stride=1)
+conv2 = ResBlock3(conv2,chanels=128,conv1_stride=1)
+conv3 = ResBlock3(conv2,chanels=256,conv1_stride=2)
+conv3 = ResBlock3(conv3,chanels=256,conv1_stride=1)
+conv3 = ResBlock3(conv3,chanels=256,conv1_stride=1)
+conv3 = ResBlock3(conv3,chanels=256,conv1_stride=1)
+conv3 = ResBlock3(conv3,chanels=256,conv1_stride=1)
+conv3 = ResBlock3(conv3,chanels=256,conv1_stride=1)
+'''conv4 = ResBlock3(conv3,chanels=512,conv1_stride=2)
+conv4 = ResBlock3(conv4,chanels=512,conv1_stride=1)
+conv4 = ResBlock3(conv4,chanels=512,conv1_stride=1)'''
+average_pool =AveragePooling2D((int(conv3.shape[1]),int(conv3.shape[2])))(conv3)
+fc1 = Flatten()(average_pool)
+fc1 = BatchNormalization()(fc1)
+fc1 = Dense(1000,activation='relu')(fc1)
+fc1 = Dropout(0.25)(fc1)
+fc1 = Dense(n_species,activation='softmax')(fc1)
+
+adam = Adam(lr=0.001)
+reduce_lr = ReduceLROnPlateau(monitor='val_loss',patience=3,factor=0.8,min_lr=1e-4)
+checkpoint = ModelCheckpoint('F:\\TensorFlowTesting\\test\\ResNet_keras.h5',
+                             monitor='val_loss',mode='min',save_best_only=True)
+
+model = Model(inputs = Image_Input,outputs = fc1)
+model.summary()
+model.compile(optimizer=adam,loss='categorical_crossentropy',metrics=['accuracy'])
+print("Training---------")
+print(Train_x.size)
+print(Train_y.size)
+model.fit(x=Train_x,y=Train_y,batch_size=64,epochs=50,validation_data=(Test_x,Test_y),callbacks=[reduce_lr,checkpoint])
+
+model = load_model('F:\\TensorFlowTesting\\test\\ResNet_keras.h5')
+score = model.evaluate(x=Test_x, y=Test_y,batch_size=64)
+print(score)
