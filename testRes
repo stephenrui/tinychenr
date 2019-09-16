@@ -1,0 +1,30 @@
+
+import matplotlib
+matplotlib.use('Agg')
+import os
+from keras.models import load_model
+import numpy as np
+from PIL import Image
+import cv2
+#加载模型h5文件
+model = load_model("F:\\TensorFlowTesting\\test\\ResNet_keras.h5")
+model.summary()
+#规范化图片大小和像素值
+pre_x=[]
+input = cv2.imread('F:\\TensorFlowTesting\\test\\test\\timg.jpg')
+input = cv2.resize(input, (100, 100))
+input = cv2.cvtColor(input, cv2.COLOR_BGR2RGB)
+pre_x.append(input)  # input一张图片
+pre_x = np.array(pre_x) / 255.0
+#要预测的图片保存在这里
+#这个路径下有两个文件，分别是cat和dog
+test = ['dasiy','dandelion','roses','sunflowers','tulips']
+#打印后：['cat', 'dog']
+print(test)
+#新建一个列表保存预测图片的地址
+images = []
+#获取每张图片的地址，并保存在列表images中
+#调用函数，规范化图片
+#预测
+pre_y = model.predict(pre_x)
+print(pre_y)
