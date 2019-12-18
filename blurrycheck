@@ -1,0 +1,54 @@
+import cv2
+import numpy as np
+
+def variance_of_laplacian(image):
+    return cv2.Laplacian(image,cv2.CV_64F).var()
+
+path = r'D:\\selfstudy\\linestest.jpg'
+image = cv2.imread(path)
+gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
+#gray = cv2.GaussianBlur(gray,(3,3),1)
+fm = variance_of_laplacian(gray)
+text = "Not Blurry"
+
+if fm < 90:
+    text = "Blurry"
+
+cv2.putText(image,"{}: {:.2f}".format(text, fm), (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 3)
+c1 = cv2.GaussianBlur(gray,(9,9),5)
+ret, c2 = cv2.threshold(c1, 100, 225,cv2.THRESH_BINARY)
+c2 = cv2.Canny(c2,50,150,apertureSize = 3)
+lines = cv2.HoughLines(c2,rho=1,theta=np.pi/180,threshold=150)
+x1 = 0
+x2 = 0
+y1 = 0
+y2 = 0
+k = 0
+try:
+    for i in range(len(lines)):
+        for r, theta in lines[i]:
+            a = np.cos(theta)
+            b = np.sin(theta)
+            x0 = a * r
+            y0 = b * r
+            a1 = int(x0 + 1000 * (-b))
+            b1 = int(y0 + 1000 * (a))
+            a2 = int(x0 - 1000 * (-b))
+            b2 = int(y0 - 1000 * (a))
+            if (a2-a1) == 0:
+                kt = 9999
+            else:
+                kt = (b2-b1)/float(a2-a1)
+            if kt > k:
+                k = kt
+                x1,x2,y1,y2 = a1,a2,b1,b2
+    cv2.putText(image,"k = {:.2f}".format(k),(10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 2)
+    cv2.line(image, (x1, y1), (x2, y2), (0, 0, 0), 2)
+    cv2.imshow("image",image)
+    cv2.imwrite("linestest.jpg",image)
+    cv2.waitKey(0)
+except:
+    print('no lines')
+    cv2.imshow("image",image)
+    cv2.imwrite("linestest.jpg",image)
+    cv2.waitKey(0)
